@@ -72,9 +72,24 @@ def trace_program(program, arguments, backend):
     return tracer
 
 
+class _TracerSubmitter:
+    """What ProgramState's with-block helpers (`with s.user():`, `s.var_scope()`)
+    submit to; when tracing, the expressions are recorded by the state itself."""
+
+    def __init__(self, state):
+        self.state = state
+
+    def submit(self, expr: SglExpr):
+        self.state._execute(expr)
+
+    def set_var(self, name, value):
+        self.state.variables[name] = value
+
+
 class TracerProgramState(ProgramState):
     def __init__(self, backend, arguments, only_trace_prefix):
         self.pid = uuid.uuid4().hex
+        self.stream_executor = _TracerSubmitter(self)
         self.backend = backend
         self.arguments: Dict[str, Any] = arguments
         self.only_trace_prefix = only_trace_prefix
@@ -224,6 +239,9 @@ class TracerProgramState(ProgramState):
         self.messages_.append({"role": expr.role, "content": ""})
 
         self.cur_role = None
+
+    def _execute_var_scope_begin(self, expr: SglVarScopeBegin):
+        pass
 
     def _execute_var_scope_end(self, expr: SglVarScopeEnd):
         new_node = SglVariable(expr.name, source=self.last_node)
