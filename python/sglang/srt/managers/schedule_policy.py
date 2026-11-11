@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import logging
 
 from sglang.srt.environ import envs
@@ -1490,10 +1491,9 @@ class PrefillAdder:
             if not insert_sort:
                 self.req_states.append((tokens_left, tokens_occupied))
             else:
-                i = 0
-                for i in range(len(self.req_states)):
-                    if tokens_left <= self.req_states[i][0]:
-                        break
+                i = bisect.bisect_left(
+                    self.req_states, tokens_left, key=lambda state: state[0]
+                )
                 self.req_states.insert(i, (tokens_left, tokens_occupied))
 
         if self.req_states is None:

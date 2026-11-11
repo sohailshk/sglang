@@ -459,6 +459,30 @@ class TestPrefillAdder(CustomTestCase):
                 self.assertEqual(adder.log_replay_tokens, min(prefix_len, 128))
                 self.assertEqual(adder.rem_chunk_tokens, 0)
 
+    def test_ignore_eos_admits_request_needing_more_decode_tokens_than_admitted(self):
+        """An ignore_eos request needing more decode tokens than every admitted
+        one is still admitted when they all fit (radix cache off)."""
+        self.mock_tree_cache.disable = True
+        self.mock_tree_cache.supports_mamba.return_value = False
+        self.mock_tree_cache.supports_prefix_sharing.return_value = False
+        self.mock_tree_cache.transfers_in_flight.return_value = False
+        self.mock_token_allocator.available_size.return_value = 1500
+        adder = self.create_adder(self.create_running_batch())
+        reqs = []
+        for i, max_new in enumerate([10, 1000]):
+            req = self.create_shared_req(f"r{i}", max_new_tokens=max_new)
+            req.sampling_params.ignore_eos = True
+            req.origin_input_ids = list(range(12))
+            req.num_matched_prefix_tokens = 0
+            self.assertEqual(
+                adder.add_one_req(
+                    req, has_chunked_req=False, truncation_align_size=None
+                ),
+                AddReqResult.CONTINUE,
+            )
+            reqs.append(req)
+        self.assertEqual(adder.can_run_list, reqs)
+
     def test_shared_admission_reserves_all_pending_requests(self):
         adder = self.create_shared_adder()
         first, second = (
